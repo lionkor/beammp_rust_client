@@ -44,16 +44,18 @@ async fn recv_packet(socket: &mut TcpStream) -> anyhow::Result<Vec<u8>> {
 }
 
 fn parse_modlist(raw_list: &String) -> anyhow::Result<Vec<(String, usize)>> {
+    if raw_list == "-" { // No mods
+        return Ok(Vec::new());
+    }
+
     let list: Vec<String> = raw_list
         .split(";")
-        .map(|s: &str| s.to_string())
+        .filter_map(|s: &str| if s.is_empty() { None } else {  Some(s.to_string()) })
         .collect();
-    let mods = &list[..list.len() / 2];
-    let sizes = &list[list.len() / 2..];
+    let mods = list[..list.len() / 2].to_vec();
+    let sizes: Vec<usize> = (&list[list.len() / 2..]).iter().map(|s| s.parse::<usize>().expect(&format!("Failed to parse size as `usize`! Number: {s}"))).collect();
 
-    // this currently doesn't work as zip will make the sizes into a string and i cant fix it in the time i have rn.
-    todo!();
-    // Ok(mods.into_iter().zip(sizes.into_iter()).collect())
+    Ok(mods.into_iter().zip(sizes.into_iter()).collect())
 }
 
 #[tokio::main]
@@ -113,17 +115,17 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    let beammp_username = env::var("BEAMMP_USER")
-        .expect("BEAMMP_USER not defined. The client currently doesn't support guest accounts, please provide BEAMMP_USER and BEAMMP_PASS in the environment.");
+    let beammp_username = env::var("BEAMMP_USER").ok();
 
-    let beammp_password = env::var("BEAMMP_PASS")
-        .expect("BEAMMP_PASS not defined. The client currently doesn't support guest accounts, please provide BEAMMP_USER and BEAMMP_PASS in the environment.");
+    let beammp_password = env::var("BEAMMP_PASS").unwrap_or(String::new());
 
-    let response = reqwest::Client::new()
+    let mut request = reqwest::Client::new()
         .post("https://auth.beammp.com/userlogin")
-        .header("Content-Type", "application/json")
-        .body(json!({ "username": beammp_username, "password": beammp_password }).to_string())
-        .send().await?;
+        .header("Content-Type", "application/json");
+    if let Some(username) = beammp_username {
+        request = request.body(json!({ "username": username, "password": beammp_password }).to_string());
+    }
+    let response = request.send().await?;
 
     let auth: AuthResponse = serde_json::from_str(response.text().await?.as_str())?;
 
@@ -156,4 +158,3 @@ async fn main() -> anyhow::Result<()> {
 
     Ok(())
 }
-
