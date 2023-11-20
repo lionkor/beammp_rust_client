@@ -147,8 +147,10 @@ async fn main() -> anyhow::Result<()> {
 
     let modlist = parse_modlist(&msg)?;
 
-    for r#mod in modlist {
-        send_packet(&mut socket, &[('f' as u8)]).await?;
+    debug!("modlist: {:?}", modlist);
+
+    for (modname, modsize) in modlist {
+        send_packet(&mut socket, &format!("f{}", modname).chars().map(|c| c as u8).collect::<Vec<u8>>()[..]).await?;
     }
 
     loop {
